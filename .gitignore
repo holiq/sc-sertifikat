@@ -1,6 +1,9 @@
 # Node modules
 /node_modules
 
+# Environment variables
+.env
+
 # Compilation output
 /dist
 
@@ -18,3 +21,6 @@
 
 # Hardhat coverage reports
 /coverage
+
+/*.log
+/ignition/deployments
