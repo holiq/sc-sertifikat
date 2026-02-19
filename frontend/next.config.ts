@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: __dirname,
   },
+  basePath: "/sc-sertifikat",
+  assetPrefix: "/sc-sertifikat/",
 };
 
 export default nextConfig;
