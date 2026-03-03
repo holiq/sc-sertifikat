@@ -1,4 +1,4 @@
-import { createPublicClient, createWalletClient, http } from "viem";
+import { createPublicClient, createWalletClient, http, custom } from "viem";
 import { sepolia } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import type { Abi } from "viem";
@@ -41,6 +41,45 @@ export function getWalletClient() {
     chain: sepolia,
     transport: http(process.env.SEPOLIA_RPC_URL),
   });
+}
+
+// ============================================================================
+// Browser Wallet Client — untuk static export (GitHub Pages)
+// Menggunakan MetaMask / wallet browser, tidak memerlukan server
+// ============================================================================
+
+declare global {
+  interface Window {
+    ethereum?: {
+      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+      on?: (event: string, handler: (...args: unknown[]) => void) => void;
+    };
+  }
+}
+
+export async function getWalletClientBrowser() {
+  if (typeof window === "undefined" || !window.ethereum) {
+    throw new Error("MetaMask atau wallet browser tidak terdeteksi. Silakan install MetaMask.");
+  }
+
+  const accounts = (await window.ethereum.request({ method: "eth_requestAccounts" })) as `0x${string}`[];
+  if (!accounts || accounts.length === 0) {
+    throw new Error("Tidak ada akun yang terhubung. Hubungkan wallet terlebih dahulu.");
+  }
+
+  const walletClient = createWalletClient({
+    account: accounts[0],
+    chain: sepolia,
+    transport: custom(window.ethereum),
+  });
+
+  // Pastikan terhubung ke Sepolia
+  const chainId = await walletClient.getChainId();
+  if (chainId !== sepolia.id) {
+    throw new Error(`Wallet terhubung ke chain ID ${chainId}. Silakan ganti ke Sepolia (chain ID ${sepolia.id}).`);
+  }
+
+  return walletClient;
 }
 
 // ============================================================================

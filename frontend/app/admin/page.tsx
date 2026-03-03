@@ -3,7 +3,7 @@
 import { useState } from "react";
 import CertificateForm from "@/components/CertificateForm";
 import StatusBadge from "@/components/StatusBadge";
-import { getCertificate, getHistory, CertStatus, STATUS_LABEL } from "@/lib/contract";
+import { getCertificate, getHistory, CertStatus, STATUS_LABEL, CONTRACT_ABI, CONTRACT_ADDRESS, publicClient, getWalletClientBrowser } from "@/lib/contract";
 import { isValidHash, shortHash } from "@/lib/hash";
 import type { CertificateData, StatusHistoryEntry } from "@/lib/contract";
 
@@ -63,14 +63,20 @@ export default function AdminPage() {
     setUpdating(true);
     setUpdateMsg(null);
     try {
-      const res = await fetch("/api/status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hash: lookupResult.hash, status: newStatus, reason }),
+      const walletClient = await getWalletClientBrowser();
+      const txHash = await walletClient.writeContract({
+        address: CONTRACT_ADDRESS,
+        abi: CONTRACT_ABI,
+        functionName: "updateStatus",
+        args: [lookupResult.hash as `0x${string}`, newStatus, reason],
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
-      setUpdateMsg({ type: "ok", text: `Status berhasil diubah. Tx: ${json.txHash}` });
+
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+      if (receipt.status !== "success") {
+        throw new Error("Transaksi gagal di blockchain");
+      }
+
+      setUpdateMsg({ type: "ok", text: `Status berhasil diubah. Tx: ${txHash}` });
       setReason("");
       const [data, history] = await Promise.all([
         getCertificate(lookupResult.hash as `0x${string}`),

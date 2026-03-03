@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { hashFile, isValidHash } from "@/lib/hash";
+import { CONTRACT_ABI, CONTRACT_ADDRESS, publicClient, getWalletClientBrowser, getCertificate } from "@/lib/contract";
 import QRCode from "qrcode";
 
 interface IssuedCertificate {
@@ -59,18 +60,32 @@ export default function CertificateForm() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/issue", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hash, label: label.trim() }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Terjadi kesalahan");
+      // Cek duplikasi sebelum mengirim transaksi (hemat gas)
+      const existing = await getCertificate(hash as `0x${string}`);
+      if (existing.exists) {
+        throw new Error("Sertifikat dengan hash ini sudah terdaftar di blockchain");
+      }
 
-      const verifyUrl = `${window.location.origin}/verify?hash=${hash}`;
+      // Kirim transaksi via browser wallet (MetaMask)
+      const walletClient = await getWalletClientBrowser();
+      const txHash = await walletClient.writeContract({
+        address: CONTRACT_ADDRESS,
+        abi: CONTRACT_ABI,
+        functionName: "issueCertificate",
+        args: [hash as `0x${string}`, label.trim()],
+      });
+
+      // Tunggu konfirmasi
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+      if (receipt.status !== "success") {
+        throw new Error("Transaksi gagal di blockchain");
+      }
+
+      const appBase = window.location.href.replace(/\/admin.*$/, "");
+      const verifyUrl = `${appBase}/verify?hash=${hash}`;
       const qrDataUrl = await QRCode.toDataURL(verifyUrl, { width: 256, margin: 2 });
 
-      setIssued({ hash, label: label.trim(), qrDataUrl, txHash: json.txHash });
+      setIssued({ hash, label: label.trim(), qrDataUrl, txHash });
       setFile(null);
       setHash("");
       setLabel("");
