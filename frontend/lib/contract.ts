@@ -45,7 +45,8 @@ export function getWalletClient() {
 
 // ============================================================================
 // Browser Wallet Client — untuk static export (GitHub Pages)
-// Menggunakan MetaMask / wallet browser, tidak memerlukan server
+// Menggunakan private key dari NEXT_PUBLIC_ADMIN_PRIVATE_KEY jika tersedia,
+// atau MetaMask / wallet browser sebagai fallback.
 // ============================================================================
 
 declare global {
@@ -58,6 +59,21 @@ declare global {
 }
 
 export async function getWalletClientBrowser() {
+  // Gunakan private key langsung jika sudah dikonfigurasi (tidak perlu MetaMask)
+  let pk = process.env.NEXT_PUBLIC_ADMIN_PRIVATE_KEY;
+  if (pk) {
+    pk = pk.trim();
+    if (!pk.startsWith("0x")) pk = `0x${pk}`;
+    if (pk.length !== 66) throw new Error("Format private key tidak valid. Pastikan berupa hex 32-byte (0x + 64 karakter).");
+    const account = privateKeyToAccount(pk as `0x${string}`);
+    return createWalletClient({
+      account,
+      chain: sepolia,
+      transport: http(process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL),
+    });
+  }
+
+  // Fallback: gunakan MetaMask / wallet browser
   if (typeof window === "undefined" || !window.ethereum) {
     throw new Error("MetaMask atau wallet browser tidak terdeteksi. Silakan install MetaMask.");
   }
