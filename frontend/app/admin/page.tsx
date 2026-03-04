@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import CertificateForm from "@/components/CertificateForm";
 import StatusBadge from "@/components/StatusBadge";
 import { getCertificate, getHistory, CertStatus, STATUS_LABEL } from "@/lib/contract";
-import { isValidHash, shortHash } from "@/lib/hash";
+import { isValidHash, shortHash, hashFile } from "@/lib/hash";
 import type { CertificateData, StatusHistoryEntry } from "@/lib/contract";
+import QRCode from "qrcode";
 
 type Tab = "issue" | "manage";
 
@@ -28,22 +29,28 @@ export default function AdminPage() {
   const [lookupHash, setLookupHash] = useState("");
   const [lookupState, setLookupState] = useState<"idle" | "loading" | "found" | "not-found" | "error">("idle");
   const [lookupResult, setLookupResult] = useState<LookupResult | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
   const [newStatus, setNewStatus] = useState<number>(1);
   const [reason, setReason] = useState("");
   const [updating, setUpdating] = useState(false);
   const [updateMsg, setUpdateMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
-  const handleLookup = async () => {
-    if (!isValidHash(lookupHash.trim())) {
+  const handleLookup = async (hashOverride?: string) => {
+    const target = (hashOverride ?? lookupHash).trim();
+    if (!isValidHash(target)) {
       setLookupState("error");
       setLookupResult(null);
+      setQrDataUrl(null);
       return;
     }
     setLookupState("loading");
     setUpdateMsg(null);
+    setQrDataUrl(null);
     try {
-      const hash = lookupHash.trim() as `0x${string}`;
+      const hash = target as `0x${string}`;
       const [data, history] = await Promise.all([getCertificate(hash), getHistory(hash)]);
       if (!data.exists) {
         setLookupState("not-found");
@@ -52,10 +59,43 @@ export default function AdminPage() {
         setLookupState("found");
         setLookupResult({ hash, data, history });
         setNewStatus(data.status === CertStatus.Active ? 1 : 0);
+        // Generate QR
+        const verifyUrl = `${window.location.origin}/verify?hash=${hash}`;
+        const qr = await QRCode.toDataURL(verifyUrl, { width: 256, margin: 2 });
+        setQrDataUrl(qr);
       }
     } catch {
       setLookupState("error");
     }
+  };
+
+  const processFile = async (file: File) => {
+    if (!file.name.endsWith(".pdf")) {
+      setLookupState("error");
+      setLookupResult(null);
+      return;
+    }
+    try {
+      const hash = await hashFile(file);
+      setLookupHash(hash);
+      await handleLookup(hash);
+    } catch {
+      setLookupState("error");
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    await processFile(f);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const f = e.dataTransfer.files?.[0];
+    if (!f) return;
+    await processFile(f);
   };
 
   const handleUpdateStatus = async () => {
@@ -190,9 +230,44 @@ export default function AdminPage() {
                   </div>
                   <div>
                     <h2 className="font-bold text-slate-800">Cari Sertifikat</h2>
-                    <p className="text-xs text-slate-400">Masukkan hash untuk menemukan data</p>
+                    <p className="text-xs text-slate-400">Upload file PDF atau masukkan hash</p>
                   </div>
                 </div>
+
+                {/* File upload drop zone */}
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Upload File PDF</label>
+                  <label
+                    className={`flex flex-col items-center justify-center w-full h-28 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200 group ${
+                      isDragging
+                        ? "border-indigo-400 bg-indigo-50 scale-[1.01]"
+                        : "border-slate-200 bg-slate-50/70 hover:bg-indigo-50/40 hover:border-indigo-300"
+                    }`}
+                    onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={handleDrop}
+                  >
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${isDragging ? "bg-indigo-100" : "bg-slate-100 group-hover:bg-indigo-100"}`}>
+                      <svg className={`w-5 h-5 transition-colors duration-200 ${isDragging ? "text-indigo-500" : "text-slate-400 group-hover:text-indigo-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                      </svg>
+                    </div>
+                    <span className={`text-sm font-medium transition-colors duration-200 ${isDragging ? "text-indigo-600" : "text-slate-500 group-hover:text-indigo-600"}`}>
+                      {isDragging ? "Lepas file di sini" : "Klik atau drag & drop PDF"}
+                    </span>
+                    <span className="text-xs text-slate-400 mt-0.5">Hash akan dihitung otomatis</span>
+                    <input ref={fileRef} type="file" accept=".pdf" className="hidden" onChange={handleFileChange} />
+                  </label>
+                </div>
+
+                {/* Divider */}
+                <div className="flex items-center gap-3 mb-4">
+                  <hr className="flex-1 border-slate-200" />
+                  <span className="text-xs font-semibold text-slate-400 tracking-wider">ATAU</span>
+                  <hr className="flex-1 border-slate-200" />
+                </div>
+
+                {/* Hash input */}
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -203,7 +278,7 @@ export default function AdminPage() {
                     className="flex-1 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400 px-4 py-2.5 font-mono text-sm shadow-sm outline-none focus:border-indigo-400 focus:ring-3 focus:ring-indigo-400/15 focus:bg-white transition-all"
                   />
                   <button
-                    onClick={handleLookup}
+                    onClick={() => handleLookup()}
                     disabled={lookupState === "loading"}
                     className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 transition-all shadow-sm"
                   >
@@ -249,6 +324,25 @@ export default function AdminPage() {
                       <dd className="font-mono text-xs text-slate-600 break-all">{shortHash(lookupResult.data.issuer)}</dd>
                     </div>
                   </dl>
+
+                  {/* QR Code */}
+                  {qrDataUrl && (
+                    <div className="flex flex-col items-center gap-2 pt-2">
+                      <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-sm">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={qrDataUrl} alt="QR Code verifikasi" className="w-32 h-32" />
+                      </div>
+                      <p className="text-xs font-medium text-slate-500">QR Code Verifikasi</p>
+                      <a
+                        href={qrDataUrl}
+                        download={`qr-${lookupResult.hash.slice(0, 10)}.png`}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline transition-colors"
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                        Download QR Code
+                      </a>
+                    </div>
+                  )}
 
                   {/* History */}
                   {lookupResult.history.length > 0 && (

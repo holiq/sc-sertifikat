@@ -1,8 +1,10 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { CertificateData, CertStatus, StatusHistoryEntry } from "@/lib/contract";
 import { shortHash } from "@/lib/hash";
 import StatusBadge from "./StatusBadge";
+import QRCode from "qrcode";
 
 interface VerifyResultProps {
   hash: string;
@@ -18,6 +20,17 @@ function formatDate(ts: bigint): string {
 }
 
 export default function VerifyResult({ hash, data, history }: VerifyResultProps) {
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (data.exists && data.status === CertStatus.Active) {
+      const verifyUrl = `${window.location.origin}/verify?hash=${hash}`;
+      QRCode.toDataURL(verifyUrl, { width: 256, margin: 2 }).then(setQrDataUrl).catch(() => {});
+    } else {
+      setQrDataUrl(null);
+    }
+  }, [hash, data.exists, data.status]);
+
   if (!data.exists) {
     return (
       <div className="rounded-2xl border border-red-200 bg-gradient-to-br from-red-50 to-rose-50 p-8 text-center shadow-sm">
@@ -128,6 +141,27 @@ export default function VerifyResult({ hash, data, history }: VerifyResultProps)
               </li>
             ))}
           </ol>
+        </div>
+      )}
+
+      {/* QR Code */}
+      {qrDataUrl && (
+        <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 p-5 shadow-sm">
+          <div className="flex flex-col items-center gap-3">
+            <p className="text-sm font-bold text-emerald-700">QR Code Verifikasi</p>
+            <div className="p-3 bg-white rounded-xl border border-emerald-200 shadow-sm">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={qrDataUrl} alt="QR Code verifikasi" className="w-36 h-36" />
+            </div>
+            <a
+              href={qrDataUrl}
+              download={`qr-${hash.slice(0, 10)}.png`}
+              className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              Download QR Code
+            </a>
+          </div>
         </div>
       )}
 
