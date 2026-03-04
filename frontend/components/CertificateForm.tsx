@@ -200,7 +200,7 @@ export default function CertificateForm() {
             </div>
             <div>
               <h3 className="font-bold text-emerald-800">Sertifikat Berhasil Diterbitkan!</h3>
-              <p className="text-xs text-emerald-600">Tersimpan permanen di blockchain Sepolia</p>
+              <p className="text-xs text-emerald-600">Transaksi dikirim ke blockchain Sepolia — menunggu konfirmasi</p>
             </div>
           </div>
 

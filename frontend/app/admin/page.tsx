@@ -70,13 +70,30 @@ export default function AdminPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
-      setUpdateMsg({ type: "ok", text: `Status berhasil diubah. Tx: ${json.txHash}` });
+
+      setUpdateMsg({ type: "ok", text: `Transaksi dikirim. Menunggu konfirmasi blockchain… Tx: ${json.txHash}` });
       setReason("");
-      const [data, history] = await Promise.all([
-        getCertificate(lookupResult.hash as `0x${string}`),
-        getHistory(lookupResult.hash as `0x${string}`),
-      ]);
-      setLookupResult({ ...lookupResult, data, history });
+
+      // Poll blockchain sampai status berubah (maks 90 detik)
+      const targetStatus = newStatus;
+      const deadline = Date.now() + 90_000;
+      let confirmed = false;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const [data, history] = await Promise.all([
+          getCertificate(lookupResult.hash as `0x${string}`),
+          getHistory(lookupResult.hash as `0x${string}`),
+        ]);
+        setLookupResult({ ...lookupResult, data, history });
+        if (data.status === targetStatus) {
+          confirmed = true;
+          setUpdateMsg({ type: "ok", text: `Status berhasil diubah dan dikonfirmasi. Tx: ${json.txHash}` });
+          break;
+        }
+      }
+      if (!confirmed) {
+        setUpdateMsg({ type: "ok", text: `Transaksi dikirim (belum dikonfirmasi dalam 90 detik). Tx: ${json.txHash}` });
+      }
     } catch (err: unknown) {
       setUpdateMsg({ type: "err", text: (err as Error).message });
     } finally {
