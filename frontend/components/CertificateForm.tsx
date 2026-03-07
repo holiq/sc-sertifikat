@@ -16,6 +16,7 @@ export default function CertificateForm() {
   const [hash, setHash] = useState("");
   const [label, setLabel] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState<"upload" | "blockchain" | null>(null);
   const [error, setError] = useState("");
   const [issued, setIssued] = useState<IssuedCertificate | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -59,11 +60,30 @@ export default function CertificateForm() {
 
     setLoading(true);
     try {
+      // Step 1: Upload PDF ke R2 dulu — kalau gagal jangan terbitkan ke blockchain
+      setLoadingStep("upload");
+      const uploadForm = new FormData();
+      uploadForm.append("file", file!);
+      uploadForm.append("hash", hash);
+
+      const uploadRes = await fetch("/api/upload", {
+        method: "POST",
+        body: uploadForm,
+      });
+
+      if (!uploadRes.ok) {
+        const upJson = await uploadRes.json().catch(() => ({}));
+        throw new Error(`Upload PDF gagal: ${upJson.error ?? uploadRes.status}`);
+      }
+
+      // Step 2: Baru terbitkan ke blockchain
+      setLoadingStep("blockchain");
       const res = await fetch("/api/issue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ hash, label: label.trim() }),
       });
+
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Terjadi kesalahan");
 
@@ -79,6 +99,7 @@ export default function CertificateForm() {
       setError((err as Error).message);
     } finally {
       setLoading(false);
+      setLoadingStep(null);
     }
   };
 
@@ -176,7 +197,7 @@ export default function CertificateForm() {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
               </svg>
-              Memproses transaksi on-chain…
+              {loadingStep === "upload" ? "Mengupload PDF ke R2…" : "Memproses transaksi on-chain…"}
             </span>
           ) : (
             <span className="flex items-center justify-center gap-2">

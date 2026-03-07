@@ -21,6 +21,7 @@ function formatDate(ts: bigint): string {
 
 export default function VerifyResult({ hash, data, history }: VerifyResultProps) {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [pdfExists, setPdfExists] = useState(false);
 
   useEffect(() => {
     if (data.exists && data.status === CertStatus.Active) {
@@ -30,6 +31,13 @@ export default function VerifyResult({ hash, data, history }: VerifyResultProps)
       setQrDataUrl(null);
     }
   }, [hash, data.exists, data.status]);
+
+  useEffect(() => {
+    if (!data.exists) { setPdfExists(false); return; }
+    fetch(`/api/pdf/${hash}`, { method: "HEAD" })
+      .then((r) => setPdfExists(r.ok))
+      .catch(() => setPdfExists(false));
+  }, [hash, data.exists]);
 
   if (!data.exists) {
     return (
@@ -141,6 +149,44 @@ export default function VerifyResult({ hash, data, history }: VerifyResultProps)
               </li>
             ))}
           </ol>
+        </div>
+      )}
+
+      {/* PDF Viewer */}
+      {pdfExists && (
+        <div className={`rounded-2xl border p-5 shadow-sm ${
+          isActive ? "border-emerald-200 bg-emerald-50/40" : "border-slate-200 bg-white"
+        }`}>
+          <div className="flex items-center gap-2 mb-3">
+            <svg className="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+            </svg>
+            <h3 className="font-bold text-slate-800">File Sertifikat PDF</h3>
+          </div>
+          <div className="w-full rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm">
+            <object
+              data={`/api/pdf/${hash}`}
+              type="application/pdf"
+              className="w-full"
+              style={{ height: "500px" }}
+            >
+              <div className="flex flex-col items-center justify-center h-40 gap-3 text-slate-500 text-sm">
+                <svg className="w-8 h-8 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                <span>Browser tidak mendukung preview PDF.</span>
+                <a href={`/api/pdf/${hash}`} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline font-semibold">Buka PDF</a>
+              </div>
+            </object>
+          </div>
+          <div className="flex justify-end mt-3">
+            <a
+              href={`/api/pdf/${hash}`}
+              download={`sertifikat-${hash.slice(0, 10)}.pdf`}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              Download PDF
+            </a>
+          </div>
         </div>
       )}
 
